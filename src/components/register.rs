@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
 use crate::backend::do_register;
 use crate::Route;
+use dioxus::prelude::*;
 
 #[component]
 pub fn RegisterTip(is_opened: Signal<Option<String>>) -> Element {

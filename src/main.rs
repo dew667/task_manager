@@ -62,6 +62,7 @@ fn main() {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::DEBUG)
             .init();
+        
     }
     // 客户端：初始化 dioxus logger
     #[cfg(not(feature = "server"))]

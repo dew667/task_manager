@@ -407,6 +407,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link 0.2.1",
 ]
@@ -4874,9 +4875,12 @@ name = "task_manager"
 version = "0.1.0"
 dependencies = [
  "bcrypt",
+ "chrono",
  "dioxus",
  "rusqlite",
  "serde",
+ "serde_json",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "web-sys",

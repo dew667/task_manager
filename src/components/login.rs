@@ -1,6 +1,5 @@
 use crate::backend::*;
 use crate::Route;
-use dioxus::logger::tracing::debug;
 use dioxus::prelude::*;
 
 #[component]

@@ -4,20 +4,21 @@ version = "0.1.0"
 authors = ["Admin"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 dioxus = { version = "0.7.1", features = ["router", "fullstack"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tracing = { version = "0.1", features = ["max_level_debug", "release_max_level_info"] }
 tracing-subscriber = { version = "0.3", optional = true }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 bcrypt = { version = "0.17", optional = true }
 web-sys = { version = "0.3", features = ["Window", "Storage"], optional = true }
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["time"], optional = true }
 
 [features]
 default = ["web"]
 web = ["dioxus/web", "web-sys"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
-server = ["dioxus/server", "tracing-subscriber", "dep:bcrypt"]
+server = ["dioxus/server", "tracing-subscriber", "tokio/time", "dep:bcrypt"]
