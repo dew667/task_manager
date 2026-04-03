@@ -1,0 +1,90 @@
+/* Chinese font */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+:root {
+    --pico-font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+}
+
+/* Status badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.badge-idle   { background: var(--pico-muted-background); color: var(--pico-muted-color); }
+.badge-idle::before { background: var(--pico-muted-color); }
+
+.badge-doing  { background: #fff8e6; color: #b45309; }
+.badge-doing::before { background: #f59e0b; animation: pulse 1.8s ease-in-out infinite; }
+
+.badge-completed { background: #f0fdf4; color: #15803d; }
+.badge-completed::before { background: #22c55e; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.35; }
+}
+
+/* Table layout — 操作列固定宽度，右对齐 */
+.task-grid {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 1.5fr 7rem 6rem 7rem;
+    align-items: center;
+    gap: 0;
+}
+
+.task-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.task-actions button {
+    margin: 0;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.task-grid-head {
+    padding: 0.6rem 1rem;
+    background: var(--pico-table-row-stripped-background-color);
+    border-bottom: 1px solid var(--pico-table-border-color);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--pico-muted-color);
+}
+
+.task-grid-row {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--pico-table-border-color);
+    transition: background 0.15s;
+}
+
+.task-grid-row:last-child { border-bottom: none; }
+.task-grid-row:hover { background: var(--pico-table-row-stripped-background-color); }
+
+.task-grid-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-grid-row .task-name { font-weight: 600; padding-right: 1rem; }
+.task-grid-row .task-desc { color: var(--pico-muted-color); font-size: 0.875rem; padding-right: 1rem; }
+.task-grid-row .task-num  { font-size: 0.8rem; color: var(--pico-muted-color); }
+
+/* Dialog */
+dialog > article { max-width: 28rem; }
+dialog > article > header { border-bottom: 1px solid var(--pico-table-border-color); }
+dialog > article > footer { border-top: 1px solid var(--pico-table-border-color); display: flex; justify-content: flex-end; gap: 0.5rem; }
+dialog > article > footer button { margin: 0; width: auto; }
