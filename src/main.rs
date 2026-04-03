@@ -1,4 +1,4 @@
-use crate::components::{Login, NavBar, TaskManager, Register};
+use crate::components::{Login, NavBar, PomodoroTimer, Register, TaskManager};
 use dioxus::logger::tracing::{debug, Level};
 use dioxus::prelude::*;
 
@@ -7,6 +7,7 @@ use tracing_subscriber;
 
 mod backend;
 mod components;
+mod resp;
 
 // localStorage helpers — web only
 #[cfg(feature = "web")]
@@ -51,6 +52,8 @@ enum Route {
     #[layout(NavBar)]
         #[route("/task")]
         TaskManager,
+        #[route("/pomodoro")]
+        PomodoroTimer,
         #[route("/")]
         Home { },
 }

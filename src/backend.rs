@@ -1,6 +1,10 @@
-use crate::components::{Status, Task};
-use dioxus::{logger::tracing::debug};
+use crate::components::{PomodoroRecord, PomodoroState, PomodoroStats, Task};
 use dioxus::prelude::*;
+
+#[cfg(feature = "server")]
+use crate::components::{PomodoroPhase, Status};
+#[cfg(feature = "server")]
+use dioxus::logger::tracing::debug;
 
 #[cfg(feature = "server")]
 use bcrypt::{hash, verify, DEFAULT_COST};
@@ -185,4 +189,133 @@ pub async fn find_uname(user_id: i64) -> Result<String, ServerFnError> {
             .unwrap_or("".to_string())
         });
     Ok(stored_name)
+}
+
+// ── Pomodoro Server Functions ──────────────────────────────────────
+
+#[server]
+pub async fn save_pomodoro_state(
+    user_email: String,
+    state: PomodoroState,
+) -> Result<(), ServerFnError> {
+    let mut redis = crate::resp::get_redis().await?;
+    let key = format!("pomodoro:state:{}", user_email);
+    let json = serde_json::to_string(&state)
+        .map_err(|e| ServerFnError::new(format!("Serialize error: {e}")))?;
+    redis.setex(&key, 86400, &json).await?;
+    debug!("Saved pomodoro state for {user_email}");
+    Ok(())
+}
+
+#[server]
+pub async fn load_pomodoro_state(
+    user_email: String,
+) -> Result<Option<PomodoroState>, ServerFnError> {
+    let mut redis = crate::resp::get_redis().await?;
+    let key = format!("pomodoro:state:{}", user_email);
+    let val = redis.get(&key).await?;
+
+    match val {
+        None => Ok(None),
+        Some(json) => {
+            let mut state: PomodoroState = serde_json::from_str(&json)
+                .map_err(|e| ServerFnError::new(format!("Deserialize error: {e}")))?;
+
+            // If the timer was running, compensate for elapsed time since last sync
+            if state.is_running && state.last_sync_epoch > 0 {
+                let now = chrono::Utc::now().timestamp();
+                let elapsed = (now - state.last_sync_epoch).max(0) as u32;
+                if elapsed >= state.remaining_seconds {
+                    state.remaining_seconds = 0;
+                    state.is_running = false;
+                } else {
+                    state.remaining_seconds -= elapsed;
+                }
+            }
+            Ok(Some(state))
+        }
+    }
+}
+
+#[server]
+pub async fn save_pomodoro_record(
+    user_email: String,
+    record: PomodoroRecord,
+) -> Result<(), ServerFnError> {
+    let mut redis = crate::resp::get_redis().await?;
+
+    let history_key = format!("pomodoro:history:{}", user_email);
+    let json = serde_json::to_string(&record)
+        .map_err(|e| ServerFnError::new(format!("Serialize error: {e}")))?;
+    redis.lpush(&history_key, &json).await?;
+
+    // Update stats only for completed work phases
+    if record.phase == PomodoroPhase::Working {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+        let total_key = format!("pomodoro:stats:{}:total", user_email);
+        redis.incr(&total_key).await?;
+
+        let today_key = format!("pomodoro:stats:{}:today:{}", user_email, today);
+        redis.incr(&today_key).await?;
+        redis.expire(&today_key, 172800).await?; // 48h TTL
+
+        let minutes_key = format!("pomodoro:stats:{}:minutes:{}", user_email, today);
+        redis
+            .incrby(&minutes_key, record.duration_minutes as i64)
+            .await?;
+        redis.expire(&minutes_key, 172800).await?;
+    }
+
+    debug!("Saved pomodoro record for {user_email}");
+    Ok(())
+}
+
+#[server]
+pub async fn load_pomodoro_history(
+    user_email: String,
+) -> Result<Vec<PomodoroRecord>, ServerFnError> {
+    let mut redis = crate::resp::get_redis().await?;
+    let key = format!("pomodoro:history:{}", user_email);
+    let items = redis.lrange(&key, 0, 19).await?;
+
+    let records: Vec<PomodoroRecord> = items
+        .iter()
+        .filter_map(|json| serde_json::from_str(json).ok())
+        .collect();
+    Ok(records)
+}
+
+#[server]
+pub async fn load_pomodoro_stats(user_email: String) -> Result<PomodoroStats, ServerFnError> {
+    let mut redis = crate::resp::get_redis().await?;
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    let total_key = format!("pomodoro:stats:{}:total", user_email);
+    let today_key = format!("pomodoro:stats:{}:today:{}", user_email, today);
+    let minutes_key = format!("pomodoro:stats:{}:minutes:{}", user_email, today);
+
+    let total_count = redis
+        .get(&total_key)
+        .await?
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    let today_count = redis
+        .get(&today_key)
+        .await?
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    let today_focus_minutes = redis
+        .get(&minutes_key)
+        .await?
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    Ok(PomodoroStats {
+        today_count,
+        total_count,
+        today_focus_minutes,
+    })
 }

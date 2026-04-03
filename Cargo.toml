@@ -15,10 +15,11 @@ bcrypt = { version = "0.17", optional = true }
 web-sys = { version = "0.3", features = ["Window", "Storage"], optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["time"], optional = true }
+gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 
 [features]
 default = ["web"]
-web = ["dioxus/web", "web-sys"]
+web = ["dioxus/web", "web-sys", "dep:gloo-timers"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
-server = ["dioxus/server", "tracing-subscriber", "tokio/time", "dep:bcrypt"]
+server = ["dioxus/server", "tracing-subscriber", "tokio/time", "tokio/net", "tokio/io-util", "dep:bcrypt"]

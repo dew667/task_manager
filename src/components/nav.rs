@@ -18,6 +18,9 @@ pub fn NavBar() -> Element {
                     Link { to: Route::TaskManager, "任务" }
                 }
                 li {
+                    Link { to: Route::PomodoroTimer, "番茄钟" }
+                }
+                li {
                     Link { to: Route::Logout, "退出登录" }
                 }
             }
