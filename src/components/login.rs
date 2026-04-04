@@ -7,7 +7,7 @@ pub fn LoginTip(is_opened: Signal<Option<String>>) -> Element {
     if is_opened().is_some() {
         let message = is_opened.unwrap();
         rsx! {
-            p { color: "red", "{message}" }
+            p { class: "auth-error", "{message}" }
         }
     } else {
         rsx! {}
@@ -22,9 +22,9 @@ pub fn Login() -> Element {
     let nav = navigator();
     let mut user = use_context::<Signal<Option<String>>>();
     rsx! {
-        main { class: "container", width: "500px", margin_top: "200px",
-            div {
-                p { "登录" }
+        main { class: "container auth-page",
+            div { class: "auth-form",
+                h2 { "登录" }
                 LoginTip { is_opened: is_opend }
                 input {
                     name: "email",
@@ -32,7 +32,6 @@ pub fn Login() -> Element {
                     placeholder: "邮箱",
                     autocomplete: "email",
                     oninput: move |e| username.set(e.value()),
-                    {}
                 }
                 input {
                     name: "password",
@@ -40,11 +39,8 @@ pub fn Login() -> Element {
                     placeholder: "密码",
                     autocomplete: "current-password",
                     oninput: move |e| password.set(e.value()),
-                    {}
                 }
                 button {
-                    width: "500px",
-                    margin_bottom: "20px",
                     onclick: move |_| async move {
                         let username = username();
                         let password = password();
@@ -64,19 +60,15 @@ pub fn Login() -> Element {
                         }
                     },
                     "登录"
-                    {}
                 }
                 button {
-                    width: "500px",
+                    class: "secondary",
                     onclick: move |_| async move {
                         nav.push(Route::Register);
                     },
                     "注册账号"
-                    {}
                 }
-            
             }
         }
-
     }
 }

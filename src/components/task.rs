@@ -19,11 +19,11 @@ impl std::fmt::Display for Status {
 }
 
 impl Status {
-    fn badge_class(&self) -> &'static str {
+    pub fn to_i32(&self) -> i32 {
         match self {
-            Status::Idle => "badge badge-idle",
-            Status::Doing => "badge badge-doing",
-            Status::Completed => "badge badge-completed",
+            Status::Idle => 0,
+            Status::Doing => 1,
+            Status::Completed => 2,
         }
     }
 }
@@ -40,52 +40,106 @@ pub struct Task {
     pub assignee_name: String,
 }
 
+// ── TaskManager (root component) ──────────────────────────────────
+
 #[component]
 pub fn TaskManager() -> Element {
-    let mut page: Signal<u32> = use_signal(|| 1);
-    let page_size: u32 = 6;
+    let page: Signal<u32> = use_signal(|| 1);
+    let page_size: u32 = 9;
     let tasks = use_resource(move || list_tasks(page(), page_size));
     use_context_provider(|| tasks);
     use_context_provider(|| page);
+
+    // Shared dialog signals
+    let editing_task: Signal<Option<Task>> = use_signal(|| None);
+    let is_form_open: Signal<bool> = use_signal(|| false);
+    let delete_target: Signal<Option<u32>> = use_signal(|| None);
+    use_context_provider(|| editing_task);
+    use_context_provider(|| is_form_open);
+    use_context_provider(|| delete_target);
+
     rsx! {
+        TaskFormDialog { is_open: is_form_open, editing_task }
+        DeleteConfirmDialog { delete_target }
         TaskToolBar {}
         TaskList { page_size }
     }
 }
 
+// ── TaskToolBar ───────────────────────────────────────────────────
+
 #[component]
 pub fn TaskToolBar() -> Element {
-    let mut is_open = use_signal(|| false);
+    let mut is_form_open = use_context::<Signal<bool>>();
+    let mut editing_task = use_context::<Signal<Option<Task>>>();
     rsx! {
         div { class: "container",
-            div { style: "display:flex; justify-content:flex-end; padding: 1rem 0 0.5rem;",
-                button { onclick: move |_| is_open.set(!is_open()), "+ 新建任务" }
+            div { class: "task-toolbar",
+                button {
+                    onclick: move |_| {
+                        editing_task.set(None);
+                        is_form_open.set(true);
+                    },
+                    "+ 新建任务"
+                }
             }
         }
-        TaskAddDialog { is_open }
     }
 }
 
+// ── TaskFormDialog (unified create / edit) ─────────────────────────
+
 #[component]
-pub fn TaskAddDialog(mut is_open: Signal<bool>) -> Element {
+pub fn TaskFormDialog(
+    mut is_open: Signal<bool>,
+    mut editing_task: Signal<Option<Task>>,
+) -> Element {
     let mut name = use_signal(|| String::new());
     let mut content = use_signal(|| String::new());
     let mut start_time = use_signal(|| String::new());
     let mut end_time = use_signal(|| String::new());
-    let user_id: Signal<Option<i64>> = use_signal(|| None);
+    let mut user_id: Signal<Option<i64>> = use_signal(|| None);
     let mut message = use_signal(|| String::new());
     let mut tasks = use_context::<Resource<Result<(Vec<Task>, u32), ServerFnError>>>();
+
+    // When editing_task changes, populate or clear form fields
+    use_effect(move || {
+        if let Some(task) = editing_task() {
+            name.set(task.name.clone());
+            content.set(task.content.clone());
+            start_time.set(task.start_time.clone());
+            end_time.set(task.end_time.clone());
+            user_id.set(Some(task.user_id));
+        } else {
+            name.set(String::new());
+            content.set(String::new());
+            start_time.set(String::new());
+            end_time.set(String::new());
+            user_id.set(None);
+        }
+        message.set(String::new());
+    });
+
+    let is_edit = editing_task().is_some();
+    let title = if is_edit { "编辑任务" } else { "新建任务" };
+    let submit_label = if is_edit { "保存修改" } else { "添加任务" };
+
     rsx! {
         dialog { open: is_open(),
             article {
                 header {
                     button {
                         aria_label: "close",
-                        onclick: move |_| is_open.set(false),
+                        onclick: move |_| {
+                            is_open.set(false);
+                            editing_task.set(None);
+                        },
                     }
-                    h3 { "新建任务" }
+                    h3 { "{title}" }
                 }
-                p { "{message}" }
+                if !message().is_empty() {
+                    p { class: "auth-error", "{message}" }
+                }
                 label {
                     "任务名称"
                     input {
@@ -103,7 +157,7 @@ pub fn TaskAddDialog(mut is_open: Signal<bool>) -> Element {
                         oninput: move |e| content.set(e.value()),
                     }
                 }
-                div { style: "display:grid; grid-template-columns:1fr 1fr; gap:1rem;",
+                div { class: "dialog-date-grid",
                     label {
                         "开始时间"
                         input {
@@ -128,7 +182,10 @@ pub fn TaskAddDialog(mut is_open: Signal<bool>) -> Element {
                 footer {
                     button {
                         class: "secondary",
-                        onclick: move |_| is_open.set(false),
+                        onclick: move |_| {
+                            is_open.set(false);
+                            editing_task.set(None);
+                        },
                         "取消"
                     }
                     button {
@@ -137,25 +194,41 @@ pub fn TaskAddDialog(mut is_open: Signal<bool>) -> Element {
                                 message.set("请选择任务执行人".to_string());
                                 return;
                             };
-                            let user_belong = use_context::<Signal<Option<String>>>();
-                            let uname_belong = match user_belong() {
-                                Some(uname) => uname,
-                                None => "".to_string(),
-                            };
-                            match save_task(name(), content(), start_time(), end_time(), uid, uname_belong)
-                                .await
-                            {
-                                Ok(msg) => {
-                                    message.set(msg);
-                                    tasks.restart();
-                                    is_open.set(false);
+                            if let Some(task) = editing_task() {
+                                // Edit mode
+                                let task_id = task.id.unwrap_or(0);
+                                match update_task(task_id, name(), content(), start_time(), end_time(), uid).await {
+                                    Ok(msg) => {
+                                        message.set(msg);
+                                        tasks.restart();
+                                        is_open.set(false);
+                                        editing_task.set(None);
+                                    }
+                                    Err(e) => {
+                                        message.set(format!("更新失败：{e}"));
+                                    }
                                 }
-                                Err(_) => {
-                                    message.set("保存任务出错！".to_string());
+                            } else {
+                                // Create mode
+                                let user_belong = use_context::<Signal<Option<String>>>();
+                                let uname_belong = match user_belong() {
+                                    Some(uname) => uname,
+                                    None => "".to_string(),
+                                };
+                                match save_task(name(), content(), start_time(), end_time(), uid, uname_belong).await {
+                                    Ok(msg) => {
+                                        message.set(msg);
+                                        tasks.restart();
+                                        is_open.set(false);
+                                        editing_task.set(None);
+                                    }
+                                    Err(_) => {
+                                        message.set("保存任务出错！".to_string());
+                                    }
                                 }
                             }
                         },
-                        "添加任务"
+                        "{submit_label}"
                     }
                 }
             }
@@ -163,10 +236,69 @@ pub fn TaskAddDialog(mut is_open: Signal<bool>) -> Element {
     }
 }
 
-/// None = 关闭，Some(id) = 打开并显示对应任务
+// ── DeleteConfirmDialog ───────────────────────────────────────────
+
+#[component]
+pub fn DeleteConfirmDialog(mut delete_target: Signal<Option<u32>>) -> Element {
+    let mut tasks = use_context::<Resource<Result<(Vec<Task>, u32), ServerFnError>>>();
+    let mut message = use_signal(|| String::new());
+
+    rsx! {
+        dialog { open: delete_target().is_some(),
+            article {
+                header {
+                    button {
+                        aria_label: "close",
+                        onclick: move |_| {
+                            delete_target.set(None);
+                            message.set(String::new());
+                        },
+                    }
+                    h3 { "确认删除" }
+                }
+                p { "确定要删除此任务吗？此操作不可撤销。" }
+                if !message().is_empty() {
+                    p { class: "auth-error", "{message}" }
+                }
+                footer {
+                    button {
+                        class: "secondary",
+                        onclick: move |_| {
+                            delete_target.set(None);
+                            message.set(String::new());
+                        },
+                        "取消"
+                    }
+                    button {
+                        class: "btn-danger",
+                        onclick: move |_| async move {
+                            if let Some(id) = delete_target() {
+                                match delete_task(id).await {
+                                    Ok(_) => {
+                                        tasks.restart();
+                                        delete_target.set(None);
+                                        message.set(String::new());
+                                    }
+                                    Err(e) => {
+                                        message.set(format!("删除失败：{e}"));
+                                    }
+                                }
+                            }
+                        },
+                        "删除"
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── TaskDetailDialog ──────────────────────────────────────────────
+
+/// None = closed, Some(id) = open and display the task
 #[component]
 pub fn TaskDetailDialog(mut is_detail_open: Signal<Option<u32>>, list: Vec<Task>) -> Element {
-    let content = if let Some(id) = is_detail_open() {
+    let detail_content = if let Some(id) = is_detail_open() {
         let cur_task = list.iter().find(|t| t.id == Some(id));
         match cur_task {
             Some(cur_task) => rsx! {
@@ -196,7 +328,7 @@ pub fn TaskDetailDialog(mut is_detail_open: Signal<Option<u32>>, list: Vec<Task>
                     }
                     h3 { "任务详情" }
                 }
-                {content}
+                {detail_content}
                 footer {
                     button { onclick: move |_| is_detail_open.set(None), "关闭" }
                 }
@@ -205,11 +337,16 @@ pub fn TaskDetailDialog(mut is_detail_open: Signal<Option<u32>>, list: Vec<Task>
     }
 }
 
+// ── TaskList (card-based layout) ──────────────────────────────────
+
 #[component]
 pub fn TaskList(page_size: u32) -> Element {
-    let tasks = use_context::<Resource<Result<(Vec<Task>, u32), ServerFnError>>>();
+    let mut tasks = use_context::<Resource<Result<(Vec<Task>, u32), ServerFnError>>>();
     let mut page = use_context::<Signal<u32>>();
     let mut is_detail_open: Signal<Option<u32>> = use_signal(|| None);
+    let mut is_form_open = use_context::<Signal<bool>>();
+    let mut editing_task = use_context::<Signal<Option<Task>>>();
+    let mut delete_target = use_context::<Signal<Option<u32>>>();
 
     match tasks() {
         None => rsx! {
@@ -219,7 +356,7 @@ pub fn TaskList(page_size: u32) -> Element {
         },
         Some(Err(e)) => rsx! {
             main { class: "container",
-                p { style: "color:var(--pico-del-color)", "加载失败：{e}" }
+                p { class: "auth-error", "加载失败：{e}" }
             }
         },
         Some(Ok((list, total))) => {
@@ -231,44 +368,80 @@ pub fn TaskList(page_size: u32) -> Element {
                     list: list.clone(),
                 }
                 main { class: "container",
-                    div { style: "display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;",
-                        h2 { style: "margin:0", "任务列表" }
+                    div { class: "task-header",
+                        h2 { "任务列表" }
                         span {
                             class: "badge badge-idle",
                             style: "cursor:default",
                             "共 {total} 项"
                         }
                     }
-                    figure { style: "margin:0; overflow:hidden; border-radius:var(--pico-border-radius); border:1px solid var(--pico-table-border-color);",
-                        div { class: "task-grid task-grid-head",
-                            span { "#" }
-                            span { "名称" }
-                            span { "描述" }
-                            span { "执行人" }
-                            span { "状态" }
-                            span { style: "text-align:right", "操作" }
-                        }
-                        if list.is_empty() {
-                            p { style: "text-align:center; padding:3rem; color:var(--pico-muted-color); margin:0;",
-                                "暂无任务"
-                            }
-                        }
-                        for (index , task) in list.iter().enumerate() {
-                            {
-                                let task_id = task.id.unwrap_or(index as u32);
-                                let assignee = task.assignee_name.clone();
-                                rsx! {
-                                    div { class: "task-grid task-grid-row",
-                                        span { class: "task-num", "{(cur - 1) * page_size + index as u32 + 1}" }
-                                        span { class: "task-name", "{task.name}" }
-                                        span { class: "task-desc", "{task.content}" }
-                                        span { class: "task-execute", "{assignee}" }
-                                        span { class: "{task.status.badge_class()}", "{task.status}" }
-                                        div { class: "task-actions",
-                                            button {
-                                                class: "outline secondary",
-                                                onclick: move |_| is_detail_open.set(Some(task_id)),
-                                                "详情"
+                    if list.is_empty() {
+                        p { class: "task-empty", "暂无任务" }
+                    } else {
+                        div { class: "task-card-grid",
+                            for task in list.iter() {
+                                {
+                                    let task_id = task.id.unwrap_or(0);
+                                    let task_clone = task.clone();
+                                    let assignee = task.assignee_name.clone();
+                                    let cur_status_i32 = task.status.to_i32();
+                                    rsx! {
+                                        div { class: "task-card",
+                                            div { class: "task-card-header",
+                                                span { class: "task-card-name", "{task.name}" }
+                                                select {
+                                                    class: "status-select",
+                                                    value: "{cur_status_i32}",
+                                                    onchange: move |evt| async move {
+                                                        if let Ok(new_val) = evt.value().parse::<i32>() {
+                                                            if new_val != cur_status_i32 {
+                                                                if let Ok(_) = update_task_status(task_id, new_val).await {
+                                                                    tasks.restart();
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    option { value: "0", selected: cur_status_i32 == 0, "待处理" }
+                                                    option { value: "1", selected: cur_status_i32 == 1, "进行中" }
+                                                    option { value: "2", selected: cur_status_i32 == 2, "已完成" }
+                                                }
+                                            }
+                                            if !task.content.is_empty() {
+                                                div { class: "task-card-content", "{task.content}" }
+                                            }
+                                            div { class: "task-card-meta",
+                                                span { "执行人: {assignee}" }
+                                                if !task.start_time.is_empty() {
+                                                    span { "开始: {task.start_time}" }
+                                                }
+                                                if !task.end_time.is_empty() {
+                                                    span { "结束: {task.end_time}" }
+                                                }
+                                            }
+                                            div { class: "task-card-footer",
+                                                button {
+                                                    class: "outline secondary",
+                                                    onclick: move |_| {
+                                                        is_detail_open.set(Some(task_id));
+                                                    },
+                                                    "详情"
+                                                }
+                                                button {
+                                                    class: "outline secondary",
+                                                    onclick: move |_| {
+                                                        editing_task.set(Some(task_clone.clone()));
+                                                        is_form_open.set(true);
+                                                    },
+                                                    "编辑"
+                                                }
+                                                button {
+                                                    class: "outline btn-danger",
+                                                    onclick: move |_| {
+                                                        delete_target.set(Some(task_id));
+                                                    },
+                                                    "删除"
+                                                }
                                             }
                                         }
                                     }
@@ -276,8 +449,8 @@ pub fn TaskList(page_size: u32) -> Element {
                             }
                         }
                     }
-                    // 分页按钮
-                    div { style: "display:flex; justify-content:center; align-items:center; gap:0.5rem; margin-top:1rem;",
+                    // Pagination
+                    div { class: "task-pagination",
                         button {
                             class: "outline secondary",
                             disabled: cur <= 1,
@@ -288,7 +461,11 @@ pub fn TaskList(page_size: u32) -> Element {
                             {
                                 let is_cur = p == cur;
                                 rsx! {
-                                    button { class: if is_cur { "" } else { "outline secondary" }, onclick: move |_| page.set(p), "{p}" }
+                                    button {
+                                        class: if is_cur { "" } else { "outline secondary" },
+                                        onclick: move |_| page.set(p),
+                                        "{p}"
+                                    }
                                 }
                             }
                         }
@@ -304,6 +481,8 @@ pub fn TaskList(page_size: u32) -> Element {
         }
     }
 }
+
+// ── UserSelector ──────────────────────────────────────────────────
 
 #[component]
 pub fn UserSelector(selected_id: Signal<Option<i64>>) -> Element {

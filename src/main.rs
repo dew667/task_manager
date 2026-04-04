@@ -104,7 +104,7 @@ fn Home() -> Element {
     };
     rsx! {
         main { class: "container",
-            div { style: "text-align:center; padding: 5rem 1rem;",
+            div { class: "home-hero",
                 h1 { "任务管理" }
                 p { "欢迎 {uname}" }
                 p { "保持专注，高效完成每一件事。" }

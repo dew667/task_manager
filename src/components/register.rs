@@ -7,7 +7,7 @@ pub fn RegisterTip(is_opened: Signal<Option<String>>) -> Element {
     if is_opened().is_some() {
         let message = is_opened.unwrap();
         rsx! {
-            p { color: "red", "{message}" }
+            p { class: "auth-error", "{message}" }
         }
     } else {
         rsx! {}
@@ -22,9 +22,9 @@ pub fn Register() -> Element {
     let nav = navigator();
 
     rsx! {
-        main { class: "container", width: "500px", margin_top: "200px",
-            div {
-                p { "注册" }
+        main { class: "container auth-page",
+            div { class: "auth-form",
+                h2 { "注册" }
                 RegisterTip { is_opened: is_opend }
                 input {
                     name: "email",
@@ -32,7 +32,6 @@ pub fn Register() -> Element {
                     placeholder: "邮箱",
                     autocomplete: "email",
                     oninput: move |e| username.set(e.value()),
-                    {}
                 }
                 input {
                     name: "password",
@@ -40,11 +39,8 @@ pub fn Register() -> Element {
                     placeholder: "密码",
                     autocomplete: "current-password",
                     oninput: move |e| password.set(e.value()),
-                    {}
                 }
                 button {
-                    width: "500px",
-                    margin_bottom: "20px",
                     onclick: move |_| async move {
                         let username = username();
                         let password = password();
@@ -60,10 +56,8 @@ pub fn Register() -> Element {
                         }
                     },
                     "注册"
-                    {}
                 }
             }
         }
-
     }
 }

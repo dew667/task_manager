@@ -191,6 +191,48 @@ pub async fn find_uname(user_id: i64) -> Result<String, ServerFnError> {
     Ok(stored_name)
 }
 
+// ── Task CRUD Server Functions ─────────────────────────────────────
+
+#[server]
+pub async fn update_task(
+    id: u32,
+    name: String,
+    content: String,
+    start_time: String,
+    end_time: String,
+    user_id: i64,
+) -> Result<String, ServerFnError> {
+    DB.with(|conn| {
+        conn.execute(
+            "UPDATE tasks SET name=?1, content=?2, start_time=?3, end_time=?4, user_id=?5 WHERE id=?6",
+            rusqlite::params![name, content, start_time, end_time, user_id, id],
+        )
+    })
+    .map_err(|e| ServerFnError::Response(e.to_string()))?;
+    Ok("任务更新成功！".to_string())
+}
+
+#[server]
+pub async fn delete_task(id: u32) -> Result<String, ServerFnError> {
+    DB.with(|conn| {
+        conn.execute("DELETE FROM tasks WHERE id=?1", rusqlite::params![id])
+    })
+    .map_err(|e| ServerFnError::Response(e.to_string()))?;
+    Ok("任务已删除".to_string())
+}
+
+#[server]
+pub async fn update_task_status(id: u32, status: i32) -> Result<String, ServerFnError> {
+    DB.with(|conn| {
+        conn.execute(
+            "UPDATE tasks SET status=?1 WHERE id=?2",
+            rusqlite::params![status, id],
+        )
+    })
+    .map_err(|e| ServerFnError::Response(e.to_string()))?;
+    Ok("状态已更新".to_string())
+}
+
 // ── Pomodoro Server Functions ──────────────────────────────────────
 
 #[server]
