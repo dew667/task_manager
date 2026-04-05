@@ -16,11 +16,10 @@ web-sys = { version = "0.3", features = ["Window", "Storage"], optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["time"], optional = true }
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
-dioxus-cli = "0.7.4"
 
 [features]
 default = ["web"]
 web = ["dioxus/web", "web-sys", "dep:gloo-timers"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
-server = ["dioxus/server", "tracing-subscriber", "tokio/time", "tokio/net", "tokio/io-util", "dep:bcrypt", "dep:rusqlite"]
+server = ["dioxus/server", "tracing-subscriber", "dep:tokio", "tokio/time", "tokio/net", "tokio/io-util", "dep:bcrypt", "dep:rusqlite"]
